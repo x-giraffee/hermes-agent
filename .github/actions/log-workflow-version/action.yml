@@ -1,0 +1,111 @@
+name: 'Log Workflow Version'
+description: 'Logs which commit the workflow came from, warns if workflow differs between base/head, and suggests workflow mismatch as failure cause'
+
+inputs:
+  workflow-file:
+    description: 'Path to the workflow file to check (e.g. .github/workflows/tests.yml)'
+    required: true
+    default: '.github/workflows/tests.yml'
+
+runs:
+  using: composite
+  steps:
+    # ============================================================
+    # PRE step: runs BEFORE all other job steps
+    # ============================================================
+    - name: 📋 Log workflow source commit
+      id: workflow-source
+      shell: bash
+      run: |
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "🔍 Workflow Version Check"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Event: ${{ github.event_name }}"
+        echo "Triggering commit (workflow source): ${{ github.workflow_ref }}"
+        echo "Head ref (PR branch): ${{ github.head_ref || github.ref_name }}"
+        echo "Base ref (target branch): ${{ github.base_ref || 'N/A' }}"
+        echo "Workflow file: ${{ inputs.workflow-file }}"
+        echo "Runner OS: ${{ runner.os }}"
+        echo ""
+
+    - name: 🔀 Compare workflow file between base and head
+      id: compare-workflow
+      if: github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        WORKFLOW_FILE="${{ inputs.workflow-file }}"
+
+        # Get the workflow content from base branch (main)
+        echo "Fetching workflow from base branch (${{ github.base_ref }})..."
+        BASE_CONTENT=$(git show origin/${{ github.base_ref }}:${WORKFLOW_FILE} 2>/dev/null) || {
+          echo "⚠️  Could not fetch workflow from base branch"
+          echo "base-workflow-exists=false" >> $GITHUB_OUTPUT
+          exit 0
+        }
+        echo "base-workflow-exists=true" >> $GITHUB_OUTPUT
+
+        # Get the workflow content from head branch (PR branch)
+        echo "Fetching workflow from head branch (${{ github.head_ref }})..."
+        HEAD_CONTENT=$(git show ${{ github.sha }}:${WORKFLOW_FILE} 2>/dev/null) || {
+          echo "⚠️  Could not fetch workflow from head branch"
+          echo "head-workflow-exists=false" >> $GITHUB_OUTPUT
+          exit 0
+        }
+        echo "head-workflow-exists=true" >> $GITHUB_OUTPUT
+
+        # Compare
+        if [ "$BASE_CONTENT" = "$HEAD_CONTENT" ]; then
+          echo "✅ Workflow file is IDENTICAL between base and head"
+          echo "workflows-differ=false" >> $GITHUB_OUTPUT
+        else
+          echo "⚠️  Workflow file DIFFERS between base and head!"
+          echo "workflows-differ=true" >> $GITHUB_OUTPUT
+          echo ""
+          echo "📄 Base branch version:"
+          echo "$BASE_CONTENT" | head -50
+          echo "..."
+          echo ""
+          echo "📄 Head branch version:"
+          echo "$HEAD_CONTENT" | head-50
+          echo "..."
+          echo ""
+          echo "::warning title=Workflow file mismatch::This PR modifies '${WORKWORKFLOW_FILE}' but PR checks run the BASE branch's workflow. Your branch's workflow changes will NOT take effect until merged to main. This is a common source of confusing CI failures."
+        fi
+
+    # ============================================================
+    # POST step: runs AFTER all other job steps (even on failure)
+    # Uses the special ${{ job.status }} context
+    # ============================================================
+    - name: 📊 Post-run failure hint
+      if: job.status == 'failure' && steps.compare-workflow.outputs.workflows-differ == 'true'
+      shell: bash
+      run: |
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "💡 Failure Context Hint"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "❌ This job failed AND the workflow file differs between base and head."
+        echo ""
+        echo "🤔 This mismatch is a STRONG CANDIDATE for the failure cause:"
+        echo "   • PR runs use BASE branch's workflow (main)"
+        echo "   • Your branch's workflow changes are IGNORED on PR checks"
+        echo "   • But your branch's CODE (test runner, configs) IS used"
+        echo ""
+        echo "🔧 Common symptoms of this mismatch:"
+        echo "   • Test timeouts differ (branch: 600s vs main: 30s)"
+        echo "   • New test flags/options not recognized"
+        echo "   • Missing env vars your branch's runner expects"
+        echo "   • Different matrix/slicing strategy"
+        echo ""
+        echo "✅ To fix: merge to main (or push directly to main), then re-run PR checks."
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    - name: 📊 Post-run success note
+      if: job.status == 'success' && steps.compare-workflow.outputs.workflows-differ == 'true'
+      shell: bash
+      run: |
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "ℹ️  Note: Workflow Still Differs"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "✅ Job passed, but workflow file differs between base and head."
+        echo "   Future PR runs will still use main's workflow until merged."
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

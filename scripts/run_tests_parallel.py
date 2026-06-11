@@ -115,6 +115,19 @@ def _count_tests(
         *[str(f) for f in files],
         *pytest_passthrough,
     ]
+    
+    # DEBUG PROBE
+    import tomllib
+    try:
+        with open(repo_root / "pyproject.toml", "rb") as f:
+            cfg = tomllib.load(f)
+            addopts = cfg.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "NOT FOUND")
+        print(f"\\n[DEBUG _count_tests] pyproject.toml addopts: {addopts}", flush=True)
+        print(f"[DEBUG _count_tests] pytest_passthrough: {pytest_passthrough}", flush=True)
+        print(f"[DEBUG _count_tests] cmd: {cmd[:5]}... (len {len(cmd)})", flush=True)
+    except Exception as e:
+        print(f"\\n[DEBUG _count_tests] failed to read pyproject.toml: {e}", flush=True)
+
     try:
         result = subprocess.run(
             cmd,
@@ -276,6 +289,26 @@ def _run_one_file(
     """
     cmd = [sys.executable, "-m", "pytest", str(file), *pytest_args]
     
+    # DEBUG PROBE: print pyproject.toml addopts and cmd to trace where --timeout comes from
+    import tomllib
+    import hashlib
+    try:
+        pyproject_path = repo_root / "pyproject.toml"
+        raw_bytes = pyproject_path.read_bytes()
+        file_hash = hashlib.sha256(raw_bytes).hexdigest()[:16]
+        
+        with open(pyproject_path, "rb") as f:
+            cfg = tomllib.load(f)
+            addopts = cfg.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "NOT FOUND")
+            
+        print(f"\n[DEBUG] file: {file.name}", flush=True)
+        print(f"[DEBUG] pyproject.toml SHA256(prefix): {file_hash}", flush=True)
+        print(f"[DEBUG] pyproject.toml addopts: {addopts}", flush=True)
+        print(f"[DEBUG] pytest_args: {pytest_args}", flush=True)
+        print(f"[DEBUG] cmd: {cmd}", flush=True)
+    except Exception as e:
+        print(f"\n[DEBUG] failed to read pyproject.toml: {e}", flush=True)
+
     subproc_start = time.monotonic()
     # launch the pytest process
     proc = subprocess.Popen(
@@ -623,6 +656,47 @@ def _slice_files(
 
 
 def main() -> int:
+    # --- DEBUG PROBES ---
+    import hashlib
+    import subprocess as _sub
+    print("\n" + "="*80, flush=True)
+    print("[DEBUG CI PROBE] START OF run_tests_parallel.py", flush=True)
+    
+    # 1. Current commit info
+    try:
+        head_commit = _sub.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        print(f"[DEBUG CI PROBE] HEAD commit: {head_commit}", flush=True)
+        
+        # Check if it's a merge commit (has 2 parents)
+        parents = _sub.check_output(["git", "rev-list", "--parents", "-n", "1", "HEAD"], text=True).strip().split()
+        if len(parents) >= 3:  # HEAD + parent1 + parent2
+            print("[DEBUG CI PROBE] This IS a merge commit.", flush=True)
+            print(f"[DEBUG CI PROBE] Parent 1: {parents[1]}", flush=True)
+            print(f"[DEBUG CI PROBE] Parent 2: {parents[2]}", flush=True)
+        else:
+            p1 = parents[1] if len(parents) > 1 else 'N/A'
+            print(f"[DEBUG CI PROBE] NOT a merge commit (1 parent: {p1})", flush=True)
+    except Exception as e:
+        print(f"[DEBUG CI PROBE] Failed to get git info: {e}", flush=True)
+    
+    # 2. SHA256 of key files to verify they match what we expect
+    try:
+        def sha256_file(path):
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(8192), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        
+        pyproject_sha = sha256_file("pyproject.toml")
+        runner_sha = sha256_file("scripts/run_tests_parallel.py")
+        print(f"[DEBUG CI PROBE] pyproject.toml SHA256: {pyproject_sha}", flush=True)
+        print(f"[DEBUG CI PROBE] run_tests_parallel.py SHA256: {runner_sha}", flush=True)
+    except Exception as e:
+        print(f"[DEBUG CI PROBE] Failed to hash files: {e}", flush=True)
+    print("="*80 + "\n", flush=True)
+    # --- END DEBUG PROBES ---
+
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
