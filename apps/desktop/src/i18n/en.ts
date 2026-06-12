@@ -1204,10 +1204,10 @@ export const en: Translations = {
     attachments: count => `${count} attachment${count === 1 ? '' : 's'}`,
     editingInComposer: 'Editing in composer',
     editingQueuedInComposer: 'Editing queued turn in composer',
-    editQueued: 'Edit queued turn',
-    sendQueuedNext: 'Send queued turn next',
-    sendQueuedNow: 'Send queued turn now',
-    deleteQueued: 'Delete queued turn',
+    queueEdit: 'Edit',
+    queueSendNext: 'Next',
+    queueSend: 'Send',
+    queueDelete: 'Delete',
     previewUnavailable: 'Preview unavailable',
     previewLabel: label => `Preview ${label}`,
     couldNotPreview: label => `Could not preview ${label}`,
@@ -1252,6 +1252,16 @@ export const en: Translations = {
     }
   },
 
+  statusStack: {
+    agents: 'Agents',
+    background: count => `${count} Background`,
+    subagents: count => `${count} Subagent${count === 1 ? '' : 's'}`,
+    running: 'Running',
+    stop: 'Stop',
+    dismiss: 'Dismiss',
+    exit: code => `exit ${code}`
+  },
+
   updates: {
     stages: {
       idle: 'Getting ready…',
@@ -1287,7 +1297,8 @@ export const en: Translations = {
     copied: 'Copied',
     done: 'Done',
     applyingBody: 'The Hermes updater will take over in its own window and reopen Hermes when it’s done.',
-    applyingBodyBackend: 'The remote backend is applying the update and will restart. Hermes reconnects automatically when it’s back.',
+    applyingBodyBackend:
+      'The remote backend is applying the update and will restart. Hermes reconnects automatically when it’s back.',
     applyingClose: 'Hermes will close to apply the update.',
     errorTitle: 'Update didn’t finish',
     errorBody: 'No worries — nothing was lost. You can try again now.',

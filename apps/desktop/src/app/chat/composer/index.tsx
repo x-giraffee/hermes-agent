@@ -48,6 +48,7 @@ import {
   shouldAutoDrainOnSettle,
   updateQueuedPrompt
 } from '@/store/composer-queue'
+import { $statusItemsBySession } from '@/store/composer-status'
 import { $gatewayState, $messages, setSessionPickerOpen } from '@/store/session'
 import { $threadScrolledUp } from '@/store/thread-scroll'
 import { useTheme } from '@/themes'
@@ -86,6 +87,7 @@ import {
   RICH_INPUT_SLOT,
   slashChipElement
 } from './rich-editor'
+import { ComposerStatusStack } from './status-stack'
 import { detectTrigger, extractClipboardImageBlobs, textBeforeCaret, type TriggerState } from './text-utils'
 import { ComposerTriggerPopover } from './trigger-popover'
 import type { ChatBarProps } from './types'
@@ -168,6 +170,7 @@ export function ChatBar({
   const draft = useAuiState(s => s.composer.text)
   const attachments = useStore($composerAttachments)
   const queuedPromptsBySession = useStore($queuedPromptsBySession)
+  const statusItemsBySession = useStore($statusItemsBySession)
   const scrolledUp = useStore($threadScrolledUp)
   const sessionMessages = useStore($messages)
   const activeQueueSessionKey = queueSessionKey || sessionId || null
@@ -176,6 +179,14 @@ export function ChatBar({
     () => (activeQueueSessionKey ? (queuedPromptsBySession[activeQueueSessionKey] ?? []) : []),
     [activeQueueSessionKey, queuedPromptsBySession]
   )
+
+  const statusStackVisible = useMemo(() => {
+    if (!activeQueueSessionKey) {
+      return false
+    }
+
+    return queuedPrompts.length > 0 || (statusItemsBySession[activeQueueSessionKey]?.length ?? 0) > 0
+  }, [activeQueueSessionKey, queuedPrompts.length, statusItemsBySession])
 
   const composerRef = useRef<HTMLFormElement | null>(null)
   const composerSurfaceRef = useRef<HTMLDivElement | null>(null)
@@ -688,8 +699,7 @@ export function ChatBar({
     // already an arg pick (`/personality alice`), so it commits normally.
     const command = (item.metadata as { command?: string } | undefined)?.command ?? ''
 
-    const expandsToArgs =
-      trigger.kind === '/' && !serialized.includes(' ') && desktopSlashCommandTakesArgs(command)
+    const expandsToArgs = trigger.kind === '/' && !serialized.includes(' ') && desktopSlashCommandTakesArgs(command)
 
     const text = starter || serialized.endsWith(' ') ? serialized : `${serialized} `
     const directive = !starter && serialized.match(/^@([^:]+):(.+)$/)
@@ -1113,11 +1123,8 @@ export function ChatBar({
     }
   }
 
-  const stashAt = (
-    scope: string | null,
-    text = draftRef.current,
-    attachments = $composerAttachments.get()
-  ) => stashSessionDraft(scope, text, attachments)
+  const stashAt = (scope: string | null, text = draftRef.current, attachments = $composerAttachments.get()) =>
+    stashSessionDraft(scope, text, attachments)
 
   // Per-thread draft swap — the composer's only session coupling. Lifecycle
   // never clears composer state; this effect alone stashes on leave, restores
@@ -1669,6 +1676,7 @@ export function ChatBar({
           className="group/composer absolute bottom-0 left-1/2 z-30 w-[min(var(--composer-width),calc(100%-2rem))] max-w-full -translate-x-1/2 rounded-2xl pt-2 pb-[var(--composer-shell-pad-block-end)]"
           data-drag-active={dragActive ? '' : undefined}
           data-slot="composer-root"
+          data-status-stack={statusStackVisible ? '' : undefined}
           data-thread-scrolled-up={scrolledUp ? '' : undefined}
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
@@ -1696,26 +1704,30 @@ export function ChatBar({
               onPick={replaceTriggerWithChip}
             />
           )}
-          {activeQueueSessionKey && queuedPrompts.length > 0 && (
-            // Out of flow so the queue never inflates the composer's measured
-            // height (that drives thread bottom padding → chat resizes on
-            // queue). Overlaps -mb-2 onto the surface's top border for a shared
-            // edge; capped + scrollable. Overlays the chat instead of pushing it.
-            <div className="absolute inset-x-0 bottom-full z-6 -mb-2 max-h-[40vh] overflow-y-auto">
-              <QueuePanel
-                busy={busy}
-                editingId={queueEdit?.entryId ?? null}
-                entries={queuedPrompts}
-                onDelete={id => {
-                  if (removeQueuedPrompt(activeQueueSessionKey, id) && queueEdit?.entryId === id) {
-                    exitQueuedEdit('cancel')
-                  }
-                }}
-                onEdit={beginQueuedEdit}
-                onSendNow={id => void sendQueuedNow(id)}
-              />
-            </div>
-          )}
+          {/* Session-scoped status stack (subagents, background tasks, queue).
+              Out of flow so it never inflates the composer's measured height
+              (that drives thread bottom padding → chat resizes); overlays the
+              chat instead of pushing it. The stack collapses to nothing when
+              every status is empty. */}
+          <ComposerStatusStack
+            queue={
+              activeQueueSessionKey && queuedPrompts.length > 0 ? (
+                <QueuePanel
+                  busy={busy}
+                  editingId={queueEdit?.entryId ?? null}
+                  entries={queuedPrompts}
+                  onDelete={id => {
+                    if (removeQueuedPrompt(activeQueueSessionKey, id) && queueEdit?.entryId === id) {
+                      exitQueuedEdit('cancel')
+                    }
+                  }}
+                  onEdit={beginQueuedEdit}
+                  onSendNow={id => void sendQueuedNow(id)}
+                />
+              ) : null
+            }
+            sessionId={activeQueueSessionKey}
+          />
           <div
             className="pointer-events-none absolute inset-0 rounded-[inherit]"
             style={{ background: COMPOSER_FADE_BACKGROUND }}
@@ -1727,6 +1739,7 @@ export function ChatBar({
                 COMPOSER_DROP_FADE_CLASS,
                 'group-focus-within/composer:border-[color-mix(in_srgb,var(--dt-composer-ring)_calc(45%*var(--composer-ring-strength)),transparent)]',
                 'group-has-data-[state=open]/composer:border-t-transparent',
+                'group-data-[status-stack]/composer:border-t-transparent',
                 dragActive && COMPOSER_DROP_ACTIVE_CLASS
               )}
               data-slot="composer-surface"
