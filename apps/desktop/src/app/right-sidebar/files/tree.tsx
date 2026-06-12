@@ -202,16 +202,8 @@ function ProjectTreeRow({
       ref={dragHandle}
       style={style}
     >
-      {isFolder && !isPlaceholder && (
-        <span aria-hidden className="flex w-3 items-center justify-center">
-          <Codicon
-            className="text-(--ui-text-tertiary)"
-            name={node.isOpen ? 'chevron-down' : 'chevron-right'}
-            size="0.75rem"
-          />
-        </span>
-      )}
-      {!isFolder && <span aria-hidden className="w-3 shrink-0" />}
+      {/* No chevron column — the folder icon (open/closed) already carries the
+          expand state, so the extra glyph was pure noise. */}
       <span aria-hidden className="flex w-3.5 items-center justify-center text-(--ui-text-tertiary)">
         {isPlaceholder && !isErrorPlaceholder ? (
           <Codicon name="loading" size="0.75rem" spinning />

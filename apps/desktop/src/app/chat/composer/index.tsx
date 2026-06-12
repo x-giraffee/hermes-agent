@@ -14,6 +14,7 @@ import {
 } from 'react'
 
 import { hermesDirectiveFormatter, type SlashChipKind } from '@/components/assistant-ui/directive-text'
+import { composerFill, composerSurfaceGlass } from '@/components/chat/composer-dock'
 import { Button } from '@/components/ui/button'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -1749,12 +1750,8 @@ export function ChatBar({
                 aria-hidden
                 className={cn(
                   'pointer-events-none absolute inset-0 -z-10 rounded-[inherit]',
-                  'bg-[color-mix(in_srgb,var(--dt-card)_72%,transparent)]',
-                  'backdrop-blur-[0.75rem] backdrop-saturate-[1.12]',
-                  '[-webkit-backdrop-filter:blur(0.75rem)_saturate(1.12)]',
-                  'transition-[background-color] duration-150 ease-out',
-                  'group-data-[thread-scrolled-up]/composer:bg-[color-mix(in_srgb,var(--dt-card)_48%,transparent)]',
-                  'group-focus-within/composer:bg-[color-mix(in_srgb,var(--dt-card)_85%,transparent)]'
+                  composerFill,
+                  composerSurfaceGlass
                 )}
               />
               <div
@@ -1837,12 +1834,8 @@ export function ChatBarFallback() {
           aria-hidden
           className={cn(
             'pointer-events-none absolute inset-0 -z-10 rounded-[inherit]',
-            'bg-[color-mix(in_srgb,var(--dt-card)_72%,transparent)]',
-            'backdrop-blur-[0.75rem] backdrop-saturate-[1.12]',
-            '[-webkit-backdrop-filter:blur(0.75rem)_saturate(1.12)]',
-            'transition-[background-color] duration-150 ease-out',
-            'group-data-[thread-scrolled-up]/composer:bg-[color-mix(in_srgb,var(--dt-card)_48%,transparent)]',
-            'group-focus-within/composer:bg-[color-mix(in_srgb,var(--dt-card)_85%,transparent)]'
+            composerFill,
+            composerSurfaceGlass
           )}
         />
       </div>

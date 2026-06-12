@@ -3,6 +3,7 @@ import { type ReactNode, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { AGENTS_ROUTE } from '@/app/routes'
+import { composerDockCard } from '@/components/chat/composer-dock'
 import { StatusSection } from '@/components/chat/status-section'
 import { Button } from '@/components/ui/button'
 import { type Translations, useI18n } from '@/i18n'
@@ -99,10 +100,10 @@ export function ComposerStatusStack({ queue, sessionId }: ComposerStatusStackPro
           group-data variant) so the group-hover/focus override always wins. */}
       <div
         className={cn(
-          'mx-1 rounded-t-2xl border border-b-0 border-border/65 pt-0.5 pb-1 backdrop-blur-xl backdrop-saturate-150 transition-colors duration-200 ease-out [-webkit-backdrop-filter:blur(1.5rem)_saturate(1.5)]',
-          scrolledUp
-            ? 'bg-[color-mix(in_srgb,var(--dt-card)_60%,transparent)] group-hover/composer:bg-[color-mix(in_srgb,var(--dt-card)_92%,transparent)] group-focus-within/composer:bg-[color-mix(in_srgb,var(--dt-card)_92%,transparent)]'
-            : 'bg-[color-mix(in_srgb,var(--dt-card)_92%,transparent)]'
+          composerDockCard('top'),
+          'mx-1 pt-0.5 pb-1 transition-colors duration-200 ease-out',
+          scrolledUp &&
+            'bg-[color-mix(in_srgb,var(--dt-card)_60%,transparent)] group-hover/composer:bg-[color-mix(in_srgb,var(--dt-card)_92%,transparent)] group-focus-within/composer:bg-[color-mix(in_srgb,var(--dt-card)_92%,transparent)]'
         )}
       >
         <div

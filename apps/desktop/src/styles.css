@@ -969,8 +969,32 @@ canvas {
   color: var(--ui-text-tertiary) !important;
 }
 
-[data-slot='composer-root']:focus-within [data-slot='composer-surface'] > [aria-hidden='true'] {
-  background: var(--ui-chat-bubble-background) !important;
+/* ── Composer fill — ONE var painted by the surface AND anything docked to it
+   (slash·@ popover, `?` help). State ladder sets the var; consumers just paint
+   `background: var(--composer-fill)`, so every state matches by construction.
+   The :has() rule is last on purpose: while a completion drawer is open it
+   beats focus/scroll and forces an OPAQUE fill (both mix endpoints solid) —
+   translucent glass can never match across the two layers because they sample
+   different backdrops. */
+:root {
+  /* Fallback for drawers outside the main composer (e.g. edit-message). */
+  --composer-fill: color-mix(in srgb, var(--dt-card) 90%, var(--dt-background));
+}
+
+[data-slot='composer-root'] {
+  --composer-fill: color-mix(in srgb, var(--dt-card) 72%, transparent);
+}
+
+[data-slot='composer-root'][data-thread-scrolled-up] {
+  --composer-fill: color-mix(in srgb, var(--dt-card) 48%, transparent);
+}
+
+[data-slot='composer-root']:focus-within {
+  --composer-fill: var(--ui-chat-bubble-background);
+}
+
+[data-slot='composer-root']:has([data-slot='composer-completion-drawer']) {
+  --composer-fill: color-mix(in srgb, var(--dt-card) 90%, var(--dt-background));
 }
 
 /* Tool/thinking blocks now live at message-text alignment (no leading
