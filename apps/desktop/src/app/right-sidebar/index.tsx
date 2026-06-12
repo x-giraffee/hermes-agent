@@ -33,17 +33,11 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder, onChangeCwd
   const currentCwd = useStore($currentCwd).trim()
   const hasCwd = currentCwd.length > 0
 
-  const cwdName = hasCwd
-    ? (currentCwd
-        .split(/[\\/]+/)
-        .filter(Boolean)
-        .pop() ?? currentCwd)
-    : r.noFolderSelected
-
   const {
     collapseAll,
     collapseNonce,
     data,
+    effectiveCwd,
     loadChildren,
     openState,
     refreshRoot,
@@ -52,11 +46,18 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder, onChangeCwd
     setNodeOpen
   } = useProjectTree(currentCwd)
 
+  const cwdName = hasCwd
+    ? (effectiveCwd
+        .split(/[\\/]+/)
+        .filter(Boolean)
+        .pop() ?? effectiveCwd)
+    : r.noFolderSelected
+
   const canCollapse = Object.values(openState).some(Boolean)
 
   const chooseFolder = async () => {
     const selected = await selectDesktopPaths({
-      defaultPath: hasCwd ? currentCwd : undefined,
+      defaultPath: hasCwd ? effectiveCwd : undefined,
       directories: true,
       multiple: false,
       title: r.changeCwdTitle
@@ -69,7 +70,7 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder, onChangeCwd
 
   const previewFile = async (path: string) => {
     try {
-      const preview = await normalizeOrLocalPreviewTarget(path, currentCwd || undefined)
+      const preview = await normalizeOrLocalPreviewTarget(path, effectiveCwd || undefined)
 
       if (!preview) {
         throw new Error(r.couldNotPreview(path))
@@ -96,7 +97,7 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder, onChangeCwd
       <FilesystemTab
         canCollapse={canCollapse}
         collapseNonce={collapseNonce}
-        cwd={currentCwd}
+        cwd={effectiveCwd}
         cwdName={cwdName}
         data={data}
         error={rootError}
