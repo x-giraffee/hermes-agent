@@ -12,6 +12,8 @@ import type { TreeNode } from './use-project-tree'
 
 const ROW_HEIGHT = 22
 const INDENT = 10
+/** Base inset for every row; react-arborist owns paddingLeft for depth indent. */
+const TREE_ROW_INSET = 12
 
 interface ProjectTreeProps {
   collapseNonce: number
@@ -200,7 +202,13 @@ function ProjectTreeRow({
         event.dataTransfer.setData('text/plain', node.data.id)
       }}
       ref={dragHandle}
-      style={style}
+      style={{
+        ...style,
+        paddingLeft:
+          (typeof style.paddingLeft === 'number'
+            ? style.paddingLeft
+            : Number.parseFloat(String(style.paddingLeft ?? 0)) || 0) + TREE_ROW_INSET
+      }}
     >
       {/* No chevron column — the folder icon (open/closed) already carries the
           expand state, so the extra glyph was pure noise. */}
