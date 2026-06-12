@@ -85,6 +85,78 @@ jobs:
         # re-download, keeping the persisted cache small and fast to restore.
         run: uv cache prune --ci
 
+      - name: Start pyproject.toml write watchdog
+        run: |
+          sudo apt-get install -y inotify-tools >/dev/null 2>&1
+
+          # Record initial SHA
+          echo "WATCHDOG_INITIAL_SHA=$(sha256sum pyproject.toml | cut -c1-16)" >> $GITHUB_ENV
+          echo "Initial pyproject.toml SHA: $(sha256sum pyproject.toml | cut -c1-16)"
+          echo "Initial addopts: $(grep addopts pyproject.toml)"
+
+          # Background watcher: inotifywait for event-based detection
+          nohup bash -c '
+            inotifywait -m -e open -e modify -e close_write -e attrib \
+              --format "%T|%e|%w%f" --datefmt "%H:%M:%S.%N" \
+              pyproject.toml 2>/dev/null | while IFS="|" read ts event file; do
+              SHA=$(sha256sum pyproject.toml | cut -c1-16)
+              echo "[$ts] inotify: event=$event sha=$SHA"
+              echo "  addopts: $(grep addopts pyproject.toml 2>/dev/null || echo MISSING)"
+              echo "  processes with file open:"
+              lsof pyproject.toml 2>/dev/null | head -5 || echo "(lsof unavailable)"
+              echo "  recent pytest spawns:"
+              ps aux | grep -E "pytest.*test_" | grep -v grep | head -5 || echo "(none)"
+              echo "  procmap of test runner:"
+              ps aux | grep run_tests_parallel | grep -v grep | head -3 || echo "(none)"
+              echo "---"
+            done
+          ' > /tmp/watchdog-inotify.log 2>&1 &
+          INOTIFY_PID=$!
+
+          # Background SHA poll loop (check every 0.2s for any change)
+          PREV_SHA=$(sha256sum pyproject.toml | cut -c1-16)
+          nohup bash -c "
+            PREV=$PREV_SHA
+            while true; do
+              CURR=\$(sha256sum pyproject.toml | cut -c1-16)
+              if [ \"\$CURR\" != \"\$PREV\" ]; then
+                TS=\$(date -u +%H:%M:%S.%N)
+                echo \"[\$TS] ⚠️  SHA CHANGED: \$PREV -> \$CURR\"
+                echo \"  new addopts: \$(grep addopts pyproject.toml)\"
+                echo \"  git status:\"
+                git status --short pyproject.toml
+                echo \"  git log (last 3 on HEAD):\"
+                git log --oneline -3 2>/dev/null
+                echo \"  /proc/self/exe of all python processes:\"
+                ls -la /proc/*/exe 2>/dev/null | grep python | head -10
+                echo \"  all pytest PIDs and their /proc/PID/cmdline:\"
+                for pid in \$(pgrep -f pytest 2>/dev/null); do
+                  echo \"    PID \$pid: \$(cat /proc/\$pid/cmdline 2>/dev/null | tr '\\0' ' ')\"
+                  echo \"    parent: \$(cat /proc/\$pid/status 2>/dev/null | grep PPid)\"
+                  echo \"    cwd: \$(readlink /proc/\$pid/cwd 2>/dev/null)\"
+                done
+                PREV=\$CURR
+              fi
+              sleep 0.2
+            done
+          " > /tmp/watchdog-poll.log 2>&1 &
+          POLL_PID=$!
+
+          echo "INOTIFY_PID=$INOTIFY_PID" >> $GITHUB_ENV
+          echo "POLL_PID=$POLL_PID" >> $GITHUB_ENV
+          echo "Watchdog PIDs: inotify=$INOTIFY_PID poll=$POLL_PID"
+
+      - name: Lock pyproject.toml read-only (catch file-overwriting tests)
+        run: |
+          chmod 0444 pyproject.toml
+          echo "🔒 pyproject.toml locked read-only"
+          ls -la pyproject.toml
+          echo "SHA: $(sha256sum pyproject.toml | cut -c1-16)"
+          echo "addopts: $(grep addopts pyproject.toml)"
+          echo ""
+          echo "Any test subprocess that tries to write pyproject.toml will now"
+          echo "crash with PermissionError and the traceback will identify it."
+
       - name: Run tests (slice ${{ matrix.slice }}/6)
         # Per-file isolation via scripts/run_tests_parallel.py: discovers
         # every test_*.py file under tests/ (excluding integration/ + e2e/),
@@ -117,6 +189,31 @@ jobs:
           OPENROUTER_API_KEY: ""
           OPENAI_API_KEY: ""
           NOUS_API_KEY: ""
+
+      - name: Check pyproject.toml integrity after tests
+        if: always()
+        run: |
+          echo "🔍 Post-test pyproject.toml check:"
+          CURRENT_SHA=$(sha256sum pyproject.toml 2>/dev/null | cut -c1-16 || echo "MISSING")
+          INITIAL_SHA="${WATCHDOG_INITIAL_SHA:-unknown}"
+          echo "  Initial SHA: $INITIAL_SHA"
+          echo "  Current SHA: $CURRENT_SHA"
+          if [ "$CURRENT_SHA" != "$INITIAL_SHA" ] && [ "$CURRENT_SHA" != "MISSING" ]; then
+            echo "  ⚠️  FILE WAS MODIFIED during test run!"
+            echo "  Current addopts: $(grep addopts pyproject.toml 2>/dev/null)"
+            echo "  git status:"
+            git status --short pyproject.toml
+          else
+            echo "  ✅ File unchanged"
+          fi
+
+          echo ""
+          echo "📋 Watchdog inotify log (last 50 lines):"
+          tail -50 /tmp/watchdog-inotify.log 2>/dev/null || echo "(no inotify log)"
+
+          echo ""
+          echo "📋 Watchdog poll log (last 100 lines):"
+          tail -100 /tmp/watchdog-poll.log 2>/dev/null || echo "(no poll log)"
 
       - name: Upload per-slice durations
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
