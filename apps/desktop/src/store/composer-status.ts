@@ -234,3 +234,31 @@ export function stopBackgroundProcess(sid: string, id: string) {
     .catch(() => undefined)
   dismissBackgroundProcess(sid, id)
 }
+
+/**
+ * Rewind cleanup: a restore/edit discards the turns that spawned these
+ * processes, so they belong to an abandoned timeline. Kill the live ones and
+ * drop every row. Ids are marked dismissed so an in-flight `process.list` poll
+ * (kill is async) can't resurrect them; reconcile garbage-collects those once
+ * the registry stops reporting them.
+ */
+export function resetSessionBackground(sid: string) {
+  if (!sid) {
+    return
+  }
+
+  const gateway = $gateway.get()
+  const list = $backgroundStatusBySession.get()[sid] ?? []
+  const dismissed = dismissedBySession.get(sid) ?? new Set<string>()
+
+  for (const item of list) {
+    dismissed.add(item.id)
+
+    if (item.state === 'running') {
+      void gateway?.request('process.kill', { process_id: item.id, session_id: sid }).catch(() => undefined)
+    }
+  }
+
+  dismissedBySession.set(sid, dismissed)
+  writeBackground(sid, [])
+}

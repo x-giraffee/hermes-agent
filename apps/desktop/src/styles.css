@@ -837,14 +837,13 @@ canvas {
 /* Sticky human bubbles clamp to ~2 lines with a soft bottom fade so a long
    prompt doesn't dominate the viewport. The clamp lifts on focus only (clicking
    opens the edit composer, which shows the full text) — not on hover, so the
-   bubble doesn't jump as the pointer passes over it. --human-msg-full is the
-   measured content height (set in UserMessage) so it animates to the real
-   height instead of overshooting the cap. */
+   bubble doesn't jump as the pointer passes over it. No transition: the lift
+   happens in the same click that swaps in the edit composer, so animating it
+   just flashes a half-expanded bubble on the way in. */
 .sticky-human-clamp {
   cursor: pointer;
   max-height: calc(2 * var(--dt-line-height) * var(--conversation-text-font-size) + 0.15rem);
   overflow: hidden;
-  transition: max-height 0.08s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sticky-human-clamp[data-clamped='true'] {

@@ -35,6 +35,7 @@ import {
   terminalContextBlocksFromDraft,
   updateComposerAttachment
 } from '@/store/composer'
+import { resetSessionBackground } from '@/store/composer-status'
 import { clearNotifications, notify, notifyError } from '@/store/notifications'
 import { requestDesktopOnboarding } from '@/store/onboarding'
 import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile, normalizeProfileKey } from '@/store/profile'
@@ -52,6 +53,7 @@ import {
   setSessions,
   setYoloActive
 } from '@/store/session'
+import { clearSessionTodos } from '@/store/todos'
 
 import type {
   ClientSessionState,
@@ -1451,6 +1453,12 @@ export function usePromptActions({
 
       const truncateBeforeUserOrdinal = visibleUserOrdinal(messages, sourceIndex)
 
+      // The turns we're discarding may have spawned todos and background
+      // processes; they belong to the abandoned timeline, so wipe their status
+      // rows (and kill the live processes) before the fresh run repopulates.
+      clearSessionTodos(sessionId)
+      resetSessionBackground(sessionId)
+
       clearNotifications()
       setMutableRef(busyRef, true)
       setBusy(true)
@@ -1505,6 +1513,12 @@ export function usePromptActions({
       const nextMessage = messages[sourceIndex + 1]
       const isFailedTurn = nextMessage?.role === 'assistant' && Boolean(nextMessage.error)
       const editedMessage: ChatMessage = { ...source, parts: [textPart(text)] }
+
+      // Editing rewinds the conversation to this prompt — same as restore — so
+      // drop the abandoned timeline's todos/background rows (and kill the live
+      // processes) before the re-run repopulates them.
+      clearSessionTodos(sessionId)
+      resetSessionBackground(sessionId)
 
       clearNotifications()
       setMutableRef(busyRef, true)
